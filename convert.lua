@@ -1,13 +1,137 @@
 local T = {
-  a = "あ", i = "い", u = "う", e = "え", o = "お",
-  ka = "か", ki = "き", ku = "く", ke = "け", ko = "こ",
+    a = "あ", i = "い", u = "う", e = "え", o = "お",
+
+    ka = "か", ki = "き", ku = "く", ke = "け", ko = "こ",
+    sa = "さ", si = "し", su = "す", se = "せ", so = "そ",
+    ta = "た", ti = "ち", tu = "つ", te = "て", to = "と",
+    na = "な", ni = "に", nu = "ぬ", ne = "ね", no = "の",
+    ha = "は", hi = "ひ", hu = "ふ", he = "へ", ho = "ほ",
+    ma = "ま", mi = "み", mu = "む", me = "め", mo = "も",
+    ya = "や",            yu = "ゆ",            yo = "よ",
+    ra = "ら", ri = "り", ru = "る", re = "れ", ro = "ろ",
+    wa = "わ", wi = "うぃ", we = "うぇ", wo = "を",
+    n = "ん",
+
+    ga = "が", gi = "ぎ", gu = "ぐ", ge = "げ", go = "ご",
+    za = "ざ", zi = "じ", zu = "ず", ze = "ぜ", zo = "ぞ",
+    da = "だ", di = "ぢ", du = "づ", de = "で", ["do"] = "ど",
+    ba = "ば", bi = "び", bu = "ぶ", be = "べ", bo = "ぼ",
+    pa = "ぱ", pi = "ぴ", pu = "ぷ", pe = "ぺ", po = "ぽ",
+
+    shi = "し", chi = "ち", tsu = "つ", fu = "ふ",
+    ji = "じ", ja = "じゃ", ju = "じゅ", je = "じぇ", jo = "じょ",
+
+    kya = "きゃ", kyu = "きゅ", kyo = "きょ",
+    sha = "しゃ", shu = "しゅ", she = "しぇ", sho = "しょ",
+    cha = "ちゃ", chu = "ちゅ", che = "ちぇ", cho = "ちょ",
+    nya = "にゃ", nyu = "にゅ", nyo = "にょ",
+    hya = "ひゃ", hyu = "ひゅ", hyo = "ひょ",
+    mya = "みゃ", myu = "みゅ", myo = "みょ",
+    rya = "りゃ", ryu = "りゅ", ryo = "りょ",
+    gya = "ぎゃ", gyu = "ぎゅ", gyo = "ぎょ",
+    bya = "びゃ", byu = "びゅ", byo = "びょ",
+    pya = "ぴゃ", pyu = "ぴゅ", pyo = "ぴょ",
+
+    sya = "しゃ", syu = "しゅ", syo = "しょ",
+    tya = "ちゃ", tyu = "ちゅ", tyo = "ちょ",
+    zya = "じゃ", zyu = "じゅ", zyo = "じょ",
+    jya = "じゃ", jyu = "じゅ", jyo = "じょ",
+    dya = "ぢゃ", dyu = "ぢゅ", dyo = "ぢょ",
+
+    fa = "ふぁ", fi = "ふぃ", fe = "ふぇ", fo = "ふぉ",
+    tsa = "つぁ", tsi = "つぃ", tse = "つぇ", tso = "つぉ",
+    thi = "てぃ", dhi = "でぃ", twu = "とぅ", dwu = "どぅ",
+    va = "ゔぁ", vi = "ゔぃ", vu = "ゔ", ve = "ゔぇ", vo = "ゔぉ",
+
+    xa = "ぁ", xi = "ぃ", xu = "ぅ", xe = "ぇ", xo = "ぉ",
+    xya = "ゃ", xyu = "ゅ", xyo = "ょ",
+    xtu = "っ", xwa = "ゎ",
+
+    ["-"] = "ー",
 }
 
-local chunks = {"a", "o", "i"}
-local result = ""
+local function convert(s)
+    local result = ""
+    local i = 1
 
-for _, chunk in ipairs(chunks) do
-    result = result .. T[chunk]
+    while i <= #s do
+        local c         = s:sub(i, i)
+        local nxt       = s:sub(i + 1, i + 1)
+        local three     = s:sub(i, i + 2)
+        if T[three] then
+            result = result .. T[three]
+            i = i + 3
+            goto continue
+        end
+        local len
+
+        if c == "n" then
+            if nxt:match("[aeiouy]") then
+                len = 2
+            else
+                len = 1
+            end
+        elseif c == nxt and c:match("[^aeiou %-]") then
+            result = result .. "っ"
+            i = i + 1
+            goto continue
+        elseif c:match("[aeiou %-]") then
+            len = 1
+        else
+            len = 2
+        end
+
+        local chunk = s:sub(i, i + len - 1)
+        result = result .. (T[chunk] or chunk)
+        i = i + len
+        ::continue::
+    end
+
+    return result
 end
 
-print(result)
+local function kata(s)
+    local out = {}
+    for _, cp in utf8.codes(s) do
+        if cp >= 0x3041 and cp <= 0x3096 then
+            cp = cp + 0x60
+        end
+        out[#out + 1] = utf8.char(cp)
+    end
+    return table.concat(out)
+end
+
+local function load_dict(path)
+    local dict = {}
+
+    for line in io.lines(path) do
+        if line:sub(1, 1) ~= ";" then
+            local key, rest = line:match("^(%S+) /(.+)/$")
+            if key then
+                local list = {}
+                for cand in rest:gmatch("[^/]+") do
+                    list[#list + 1] = cand
+                end
+                dict[key] = list
+            end
+        end
+    end
+    return dict
+end
+
+local function candidates(hira, dict)
+    local list = {}
+
+    for _, c in ipairs(dict[hira] or {}) do
+        list[#list + 1] = c
+    end
+    list[#list + 1] = hira
+    list[#list + 1] = kata(hira)
+    return list
+end
+
+local dict = load_dict("test.dict")
+local hira = convert(io.read())
+for _, c in ipairs(candidates(hira, dict)) do
+    print(c)
+end
