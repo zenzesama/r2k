@@ -103,29 +103,39 @@ end
 
 local function load_dict(path)
     local dict = {}
+    local started = false
+
     for line in io.lines(path) do
-        if line:sub(1, 1) ~= ";" then
-            local key, rest = line:match("^(%S+) /(.+)/$")
-            if key and not key:match("[a-z]$") then
-                local list = {}
-                for piece in rest:gmatch("[^/]+") do
-                    local cand = piece:match("^%s*([^;]+)")
-                    if cand and cand:sub(1, 1) ~= "(" then
-                        list[#list + 1] = cand
-                    end
-                end
-                dict[key] = list
+        if not started then 
+            if line == ";; okuri-nasi entries." then started = true end
+        else 
+            local p = line:find(" /", 1, true)
+            if p then
+                dict[line:sub(1,  p - 1)] = line:sub(p + 2)
             end
         end
     end
     return dict
 end
 
+local function parse(rest)
+    local list = {}
+    for piece in rest:gmatch("[^/]+") do
+        local cand = piece:match("^%s*([^;]+)")
+        if cand and cand:sub(1, 1) ~= "(" then
+            list[#list + 1] = cand
+        end
+    end
+    return list
+end
+
 local function candidates(hira, dict)
     local list = {}
-
-    for _, c in ipairs(dict[hira] or {}) do
-        list[#list + 1] = c
+    local raw = dict[hira]
+    if raw then
+        for _, c in ipairs(parse(raw)) do
+            list[#list + 1] = c
+        end
     end
     list[#list + 1] = hira
     list[#list + 1] = kata(hira)
