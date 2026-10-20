@@ -103,14 +103,16 @@ end
 
 local function load_dict(path)
     local dict = {}
-
     for line in io.lines(path) do
         if line:sub(1, 1) ~= ";" then
             local key, rest = line:match("^(%S+) /(.+)/$")
-            if key then
+            if key and not key:match("[a-z]$") then
                 local list = {}
-                for cand in rest:gmatch("[^/]+") do
-                    list[#list + 1] = cand
+                for piece in rest:gmatch("[^/]+") do
+                    local cand = piece:match("^%s*([^;]+)")
+                    if cand and cand:sub(1, 1) ~= "(" then
+                        list[#list + 1] = cand
+                    end
                 end
                 dict[key] = list
             end
@@ -130,7 +132,7 @@ local function candidates(hira, dict)
     return list
 end
 
-local dict = load_dict("test.dict")
+local dict = load_dict("SKK-JISYO.L.utf8")
 local hira = convert(io.read())
 for _, c in ipairs(candidates(hira, dict)) do
     print(c)
