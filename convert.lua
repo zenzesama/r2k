@@ -101,23 +101,6 @@ local function kata(s)
     return table.concat(out)
 end
 
-local function load_dict(path)
-    local dict = {}
-    local started = false
-
-    for line in io.lines(path) do
-        if not started then 
-            if line == ";; okuri-nasi entries." then started = true end
-        else 
-            local p = line:find(" /", 1, true)
-            if p then
-                dict[line:sub(1,  p - 1)] = line:sub(p + 2)
-            end
-        end
-    end
-    return dict
-end
-
 local function parse(rest)
     local list = {}
     for piece in rest:gmatch("[^/]+") do
@@ -129,9 +112,45 @@ local function parse(rest)
     return list
 end
 
-local function candidates(hira, dict)
+local function open_dict(path)
+    local f = assert(io.open(path, "rb"))
+    if not f then
+        io.stderr:write("missing ", path, ": run fetch-dict.sh\n")
+        os.exit(1)
+    end
+    return f, f:seek("end")
+end
+
+local function lookup(f, size, key)
+    local lo, hi = 0, size
+    while hi - lo > 4096 do
+        local mid = (lo + hi) // 2
+        f:seek("set", mid)
+        f:read("l")
+        local pos = f:seek()
+        local line = f:read("l")
+        if not line then
+            hi = mid
+        else
+            local p = line:find(" /", 1, true)
+            local k = line:sub(1, p - 1)
+            if k < key then lo = pos else hi = mid end
+        end
+    end
+    f:seek("set", lo)
+    for line in f:lines() do
+        local p = line:find(" /", 1, true)
+        if p then
+            local k = line:sub(1, p - 1)
+            if k == key then return line:sub(p + 2) end
+            if k > key then return nil end
+        end
+    end
+end
+
+local function candidates(hira, f, size)
     local list = {}
-    local raw = dict[hira]
+    local raw = lookup(f, size, hira)
     if raw then
         for _, c in ipairs(parse(raw)) do
             list[#list + 1] = c
@@ -142,8 +161,58 @@ local function candidates(hira, dict)
     return list
 end
 
-local dict = load_dict("SKK-JISYO.L.utf8")
-local hira = convert(io.read())
-for _, c in ipairs(candidates(hira, dict)) do
-    print(c)
+local f, size = open_dict("okuri-nasi.txt")
+local state = {mode = "typing", buf = "", cands = {}, idx = 1, out = ""}
+
+local function display(st) 
+    if st.mode == "converting" then
+        return st.out .. "[" .. st.cands[st.idx] .. "]"
+    end
+    return st.out .. convert(st.buf)
 end
+
+local function handle_key(st, key) 
+    if st.mode == "typing" then
+        if key == "alt" then
+            if st.buf == "" then return false end
+            st.cands = candidates(convert(st.buf), f, size)
+            st.idx = 1;
+            st.mode = "converting"
+        elseif key == "enter" then
+            if st.buf == "" then return false end
+            st.out = st.out .. convert(st.buf)
+            st.buf = ""
+        elseif key == "backspace" then
+            if st.buf == "" then return false end
+            st.buf = st.buf:sub(1, -2)
+        elseif key == "left" or key == "right" then
+            return st.buf ~= ""
+        elseif #key == 1 then
+            st.buf = st.buf .. key
+        end
+    else 
+        if key == "alt" or key == "right" then
+            st.idx = st.idx % #st.cands + 1
+        elseif key == "left" then
+            st.idx = (st.idx - 2) % #st.cands + 1
+        elseif key == "enter" then
+            st.out = st.out .. st.cands[st.idx]
+            st.buf = ""
+            st.mode = "typing"
+        elseif key == "backspace" then
+            st.mode = "typing"
+        elseif #key == 1 then
+            st.out = st.out .. st.cands[st.idx]
+            st.buf = key;
+            st.mode = "typing"
+        end
+    end
+    return true
+end
+
+for token in io.read("a"):gmatch("%S+") do
+    local used = handle_key(state, token)
+    print(token, display(state), used and "" or "(pass)")
+end
+
+print("OUT: " .. state.out)
