@@ -173,7 +173,7 @@ end
 
 local function handle_key(st, key) 
     if st.mode == "typing" then
-        if key == "alt" then
+        if key == "convert" then
             if st.buf == "" then return false end
             st.cands = candidates(convert(st.buf), f, size)
             st.idx = 1;
@@ -191,7 +191,7 @@ local function handle_key(st, key)
             st.buf = st.buf .. key
         end
     else 
-        if key == "alt" or key == "right" then
+        if key == "convert" or key == "right" then
             st.idx = st.idx % #st.cands + 1
         elseif key == "left" then
             st.idx = (st.idx - 2) % #st.cands + 1
