@@ -189,14 +189,57 @@ int getWindowSize(int *rows, int *cols) {
     }
 }
 
+int isCont(unsigned char c) {
+    return (c & 0xC0) == 0x80;
+}
+
+int cpWidth(int cp) {
+    if ((cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0xA4CF) ||
+        (cp >= 0xAC00 && cp <= 0xD7A3) || (cp >= 0xF900 && cp <= 0xFAFF) ||
+        (cp >= 0xFE30 && cp <= 0xFE6F) || (cp >= 0xFF00 && cp <= 0xFF60) ||
+        (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x20000 && cp <= 0x3FFFD))
+        return 2;
+    return 1;
+}
+
+int utf8Decode(const char *s, int len, int *cp) {
+    unsigned char c = s[0];
+    int n = c < 0x80 ? 1 : 
+            (c >> 5) == 6 ? 2 :
+            (c >> 4) == 14 ? 3 :
+            (c >> 3) == 30 ? 4 : 1;
+
+    if (n > len) n = 1;
+    if (n == 1) {
+        *cp = 1;
+        return 1;
+    }
+
+    int v = c & (0xFF >> (n + 1));
+    for (int i = 1; i < n; i++) {
+        if (!isCont(s[i])) {
+            *cp = 1;
+            return 1;
+        }
+        v = (v << 6) | (s[i] & 0x3F);
+    }
+    *cp = v;
+    return n;
+}
+
 int editorCxToRx(erow *row, int cx) {
     int rx = 0;
-    int j;
-    for (j = 0; j < cx; j++) {
+    int j = 0;
+    while (j < cx) {
         if (row->chars[j] == '\t') {
             rx += (TAB_STOP - 1) - (rx % TAB_STOP);
+            j++;
         }
-        rx++;
+        else {
+            int cp;
+            j += utf8Decode(&row->chars[j], row->size - j, &cp);
+            rx += cpWidth(cp);
+        }
     }
     return rx;
 }
@@ -308,14 +351,30 @@ void editorRowDeleteChar(erow *row, int at) {
     E.dirty++;
 }
 
+int prevCharLen(erow *row, int at) {
+    int n = 1;
+    while (at - n > 0 && isCont((unsigned char)row->chars[at - n])) n++;
+    return n;
+}
+
+int nextCharLen(erow *row, int at) {
+    int n = 1;
+    while (at + n < row->size && isCont((unsigned char)row->chars[at + n])) n++;
+    return n;
+}
+
 void editorDelChar() {
     if (E.cy == E.numrows) return;
     if (E.cx == 0 && E.cy == 0) return;
 
     erow *row = &E.row[E.cy];
     if (E.cx > 0) {
-        editorRowDeleteChar(row, E.cx - 1);
-        E.cx--;
+        int n = prevCharLen(row, E.cx);
+        int i;
+        for (i = 0; i < n; i++) {
+            editorRowDeleteChar(row, E.cx - n);
+        }
+        E.cx -= n;
     }
     else {
         E.cx = E.row[E.cy - 1].size;
@@ -439,7 +498,7 @@ void editorMoveCursor(int key) {
     switch (key) {
         case ARROW_LEFT:
             if (E.cx != 0){
-                E.cx--;
+                E.cx -= prevCharLen(&E.row[E.cy], E.cx);
             }
             else if (E.cy > 0) {
                 E.cy--;
@@ -448,7 +507,7 @@ void editorMoveCursor(int key) {
             break;
         case ARROW_RIGHT:
             if (row && E.cx < row->size) {
-                E.cx++;
+                E.cx += nextCharLen(row, E.cx);
             }
             else if (row && E.cx == row->size) {
                 E.cy++;
@@ -469,6 +528,10 @@ void editorMoveCursor(int key) {
     int rowlen = row ? row->size : 0;
     if (E.cx > rowlen) {
         E.cx = rowlen;
+    }
+
+    if (row && E.cx < row->size) {
+        while (E.cx > 0 && isCont((unsigned char)row->chars[E.cx])) E.cx--;
     }
 }
 
@@ -581,14 +644,26 @@ void editorDrawRows(struct abuf *ab) {
             }
         }
         else {
-            int len = E.row[filerow].rsize - E.coloff;
-            if (len < 0) len = 0;
-            if (len > E.screencols) len = E.screencols;
-            abAppend(ab, &E.row[filerow].render[E.coloff], len);
+            char *r = E.row[filerow].render;
+            int rsize = E.row[filerow].rsize;
+            int col = 0, j = 0;
+            while (j < rsize) {
+                int cp;
+                int n = utf8Decode(&r[j], rsize - j, &cp);
+                int w = cpWidth(cp);
+                if (col >= E.coloff) {
+                    if (col + w - E.coloff > E.screencols) break;
+                    abAppend(ab, &r[j], n);
+                } 
+                else if (col + w > E.coloff) {
+                    abAppend(ab, " ", 1);
+                }
+                col += w;
+                j += n;
+            }
         }
-        
         abAppend(ab, "\x1b[K", 3);
-            abAppend(ab, "\r\n", 2);
+        abAppend(ab, "\r\n", 2);
     }
 }
 
