@@ -22,6 +22,14 @@
 #define TAB_STOP 8
 #define QUIT_TIMES 2
 
+// For ime
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
+static lua_State *L;
+static char preedit[256];
+
 enum editorKey {
     BACKSPACE = 127,
     ARROW_LEFT = 1000,
@@ -113,7 +121,7 @@ char *editorRowsToString(int *buflen) {
 
 int editorReadKey() {
     int nread;
-    char c;
+    unsigned char c;
     while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
         if (nread == -1 && errno != EAGAIN) die("read");
     }
@@ -211,7 +219,7 @@ int utf8Decode(const char *s, int len, int *cp) {
 
     if (n > len) n = 1;
     if (n == 1) {
-        *cp = 1;
+        *cp = c;
         return 1;
     }
 
@@ -535,10 +543,59 @@ void editorMoveCursor(int key) {
     }
 }
 
+const char *keyName(int c, char *buf) {
+    switch (c) {
+        case ARROW_LEFT:  return "left";
+        case ARROW_RIGHT: return "right";
+        case '\r':        return "enter";
+        case BACKSPACE:
+        case CTRL_KEY('h'): return "backspace";
+        case ' ':         return "convert";
+    }
+    if (c >= 33 && c <= 126) {
+        buf[0] = c;
+        buf[1] = '\0';
+        return buf;
+    }
+    return NULL;
+}
+
+int imeKey(int c) {
+    char buf[2];
+    const char *name = keyName(c, buf);
+    if (!name) return 0;
+
+    lua_getglobal(L, "ime");
+    lua_getfield(L, -1, "key");
+    lua_pushstring(L, name);
+    if (lua_pcall(L, 1, 3, 0) != LUA_OK) {
+        editorSetStatusMessage("ime error: %s", lua_tostring(L, -1));
+        lua_pop(L, 2);
+        return 0;
+    }
+
+    int used = lua_toboolean(L, -3);
+    size_t len;
+    const char *committed = lua_tolstring(L, -2, &len);
+    for (size_t i = 0; i < len; i++) editorInsertChar((unsigned char)committed[i]);
+
+    snprintf(preedit, sizeof(preedit), "%s", lua_tostring(L, -1));
+    if (preedit[0]) editorSetStatusMessage("IME: %s", preedit);
+    else editorSetStatusMessage("");
+
+    lua_pop(L, 4);
+    return used;
+}
+
 void editorProcessKeypress() {
     static int quit_times = QUIT_TIMES;
 
     int c = editorReadKey();
+
+    if (imeKey(c)) {
+        quit_times = QUIT_TIMES;
+        return;
+    }
 
     switch (c) {
         case '\r':
@@ -747,7 +804,18 @@ void initEditor() {
     E.screenrows -= 2;
 }
 
+void initIme() {
+    L = luaL_newstate();
+    luaL_openlibs(L);
+    if (luaL_dofile(L, "ime.lua")) {
+        fprintf(stderr, "ime.lua %s\n", lua_tostring(L, -1));
+        exit(1);
+    }
+    lua_setglobal(L, "ime");
+}
+
 int main(int argc, char **argv) {
+    initIme();
     enableRawMode();
     initEditor();
 

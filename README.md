@@ -1,3 +1,5 @@
+Lua 5.5 is vendored in vendor/lua (MIT, lua.org)
+
 do this to generate dictionary
 
 ```

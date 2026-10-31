@@ -210,9 +210,20 @@ local function handle_key(st, key)
     return true
 end
 
-for token in io.read("a"):gmatch("%S+") do
-    local used = handle_key(state, token)
-    print(token, display(state), used and "" or "(pass)")
+local function preedit(st) 
+    if st.mode == "converting" then
+        return st.cands[st.idx]
+    end
+    return convert(st.buf)
 end
 
-print("OUT: " .. state.out)
+local M = {}
+
+function M.key(name) 
+    local used = handle_key(state, name)
+    local committed = state.out
+    state.out = ""
+    return used, committed, preedit(state)
+end
+
+return M
