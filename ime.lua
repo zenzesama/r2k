@@ -226,4 +226,17 @@ function M.key(name)
     return used, committed, preedit(state)
 end
 
+function M.flush()
+    if state.mode == "converting" then
+        state.out = state.out .. state.cands[state.idx]
+    else 
+        state.out = state.out .. convert(state.buf)
+    end
+    state.buf = ""
+    state.mode = "typing"
+    local committed = state.out
+    state.out = ""
+    return committed
+end
+
 return M

@@ -27,8 +27,11 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
+#define IME_TOGGLE CTRL_KEY('j')
+
 static lua_State *L;
 static char preedit[256];
+static int imeOn = 0;
 
 enum editorKey {
     BACKSPACE = 127,
@@ -233,6 +236,16 @@ int utf8Decode(const char *s, int len, int *cp) {
     }
     *cp = v;
     return n;
+}
+
+int strWidth(const char *s) {
+    int w = 0, j = 0, n = strlen(s);
+    while (j < n) {
+        int cp;
+        j += utf8Decode(&s[j], n - j, &cp);
+        w += cpWidth(cp);
+    }
+    return w;
 }
 
 int editorCxToRx(erow *row, int cx) {
@@ -587,12 +600,37 @@ int imeKey(int c) {
     return used;
 }
 
+void imeInsert(const char *s, size_t len) {
+    for (size_t i = 0; i < len; i++) editorInsertChar((unsigned char)s[i]);
+}
+
+void imeToggle() {
+    if (imeOn) {
+        lua_getglobal(L, "ime");
+        lua_getfield(L, -1, "flush");
+        if (lua_pcall(L, 0, 1, 0) == LUA_OK) {
+            size_t len;
+            const char *s = lua_tolstring(L, -1, &len);
+            imeInsert(s, len);
+        }
+        lua_pop(L, 2);
+        preedit[0] = '\0';
+    }
+    imeOn = !imeOn;
+    editorSetStatusMessage(imeOn ? "日本語 mode" : "ENGLISH mode");
+}
+
 void editorProcessKeypress() {
     static int quit_times = QUIT_TIMES;
 
     int c = editorReadKey();
 
-    if (imeKey(c)) {
+    if (c == IME_TOGGLE) {
+        imeToggle();
+        return;
+    }
+
+    if (imeOn && imeKey(c)) {
         quit_times = QUIT_TIMES;
         return;
     }
@@ -724,18 +762,20 @@ void editorDrawRows(struct abuf *ab) {
     }
 }
 
+
 void editorDrawStatusBar(struct abuf *ab) {
     abAppend(ab, "\x1b[7m", 4);
     char status[80], rstatus[80];
-    int len = snprintf(status, sizeof(status), "%.20s - %d lines %s", 
-            E.filename ? E.filename : "[Untitled]", E.numrows, 
+    int len = snprintf(status, sizeof(status), "%.20s - %d lines %s",
+            E.filename ? E.filename : "[Untitled]", E.numrows,
             E.dirty ? "(modified)" : "");
-    int rlen = snprintf(rstatus, sizeof(rstatus), "%d/%d", 
-            E.cy + 1, E.numrows);
+    int rlen = snprintf(rstatus, sizeof(rstatus), "%s %d/%d",
+            imeOn ? "(日本語)" : "(ENGLISH)", E.cy + 1, E.numrows);
+    int rcols = strWidth(rstatus);
     if (len > E.screencols) len = E.screencols;
     abAppend(ab, status, len);
     while (len < E.screencols) {
-        if (E.screencols - len == rlen) {
+        if (E.screencols - len == rcols) {
             abAppend(ab, rstatus, rlen);
             break;
         }
