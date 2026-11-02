@@ -9,5 +9,8 @@ kaku: src/kaku.c $(LUA_OBJ)
 vendor/lua/%.o: vendor/lua/%.c
 	$(CC) -O2 -std=gnu99 -DLUA_USE_LINUX -c $< -o $@
 
+run: kaku
+	KAKU_DATA=. ./kaku
+
 clean:
 	rm -f kaku $(LUA_OBJ)

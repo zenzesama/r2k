@@ -827,6 +827,15 @@ void editorSetStatusMessage(const char *fmt, ...) {
     E.statusmsg_time = time(NULL);
 }
 
+static void dataDir(char *out, size_t n) {
+    const char *d = getenv("KAKU_DATA");
+    if (d) {
+        snprintf(out, n, "%s", d); return;
+    }
+    const char *h = getenv("HOME");
+    snprintf(out, n, "%s/.local/share/kaku", h ? h : ".");
+}
+
 void initEditor() {
     E.cx = 0;
     E.cy = 0;
@@ -847,8 +856,13 @@ void initEditor() {
 void initIme() {
     L = luaL_newstate();
     luaL_openlibs(L);
-    if (luaL_dofile(L, "ime.lua")) {
-        fprintf(stderr, "ime.lua %s\n", lua_tostring(L, -1));
+    char dir[512], path[600];
+    dataDir(dir, sizeof(dir));
+    lua_pushstring(L, dir);
+    lua_setglobal(L, "DATA_DIR");
+    snprintf(path, sizeof(path), "%s/ime.lua", dir);
+    if (luaL_dofile(L, path)) {
+        fprintf(stderr, "%s\n", lua_tostring(L, -1));
         exit(1);
     }
     lua_setglobal(L, "ime");

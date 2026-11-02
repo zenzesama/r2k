@@ -1,13 +1,42 @@
-Lua 5.5 is vendored in vendor/lua (MIT, lua.org)
+# kaku
 
-do this to generate dictionary
+A small terminal text editor with a built-in Japanese input method.
+Type romaji, press space, get kanji.
 
-```
-curl -LO https://raw.githubusercontent.com/skk-dev/dict/master/SKK-JISYO.L
-iconv -f EUC-JP -t UTF-8 SKK-JISYO.L > SKK-JISYO.L.utf8
-```
+Version 0.1
 
-then this to sort it (warning: 16050 is hardcoded because that is where comments end, may not be same on your end, it should be buy it may not. Please check and edit accordingly!)
-```
-tail -n +16050 SKK-JISYO.L.utf8 | LC_ALL=C sort -t' ' -k1,1 > okuri-nasi.txt
-```
+## Install
+
+Needs a C compiler, make, curl and iconv.
+
+    ./install.sh
+
+Installs to `~/.local/bin/kaku` and `~/.local/share/kaku`.
+Make sure `~/.local/bin` is in your PATH.
+
+## Use
+
+    kaku [file]
+
+    Ctrl-J        switch between ENGLISH and 日本語
+    Space         convert (日本語 mode)
+    Left / Right  previous / next candidate
+    Enter         accept
+    Backspace     back to kana
+    Ctrl-S        save
+    Ctrl-Q        quit
+
+The mode is shown in the bottom right of the status bar.
+Candidates are kanji first, then hiragana, then katakana.
+
+## Limits
+
+- Whole-word conversion only. No verb or adjective endings (okurigana).
+- Linux only, tested on one terminal.
+
+## Credits
+
+- Editor core follows kilo by antirez (BSD-2) and the snaptoken tutorial.
+- Lua 5.5, vendored in `vendor/lua` (MIT).
+- Dictionary: SKK-JISYO.L from skk-dev/dict (GPL v2+). Downloaded at
+  install time, not included in this repo.

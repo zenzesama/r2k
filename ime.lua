@@ -161,7 +161,7 @@ local function candidates(hira, f, size)
     return list
 end
 
-local f, size = open_dict("okuri-nasi.txt")
+local f, size = open_dict((DATA_DIR or ".") .. "/okuri-nasi.txt")
 local state = {mode = "typing", buf = "", cands = {}, idx = 1, out = ""}
 
 local function display(st) 
